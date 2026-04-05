@@ -1,0 +1,73 @@
+{
+  "expenses": [
+    {
+      "id": 1,
+      "description": "10 KG Potatoes",
+      "amount": 70,
+      "category": "Food & Dining",
+      "date": "2026-04-05",
+      "location": null,
+      "createdAt": "2026-04-05T07:14:46.778Z"
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "name": "Food & Dining",
+      "color": "#f59e0b"
+    },
+    {
+      "id": 2,
+      "name": "Transport",
+      "color": "#3b82f6"
+    },
+    {
+      "id": 3,
+      "name": "Housing",
+      "color": "#10b981"
+    },
+    {
+      "id": 4,
+      "name": "Entertainment",
+      "color": "#ec4899"
+    },
+    {
+      "id": 5,
+      "name": "Health",
+      "color": "#ef4444"
+    },
+    {
+      "id": 6,
+      "name": "Shopping",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": 7,
+      "name": "Education",
+      "color": "#6366f1"
+    },
+    {
+      "id": 8,
+      "name": "Travel",
+      "color": "#14b8a6"
+    },
+    {
+      "id": 9,
+      "name": "Other",
+      "color": "#94a3b8"
+    },
+    {
+      "id": 10,
+      "name": "Uncategorised",
+      "color": "#64748b",
+      "system": true
+    }
+  ],
+  "nextId": 2,
+  "nextCategoryId": 11,
+  "settings": {
+    "businessName": "",
+    "currency": "R",
+    "locationEnabled": true
+  }
+}
