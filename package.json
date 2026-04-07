@@ -10,7 +10,6 @@
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
     "build":      "npm install --prefix server && npm install --prefix client --legacy-peer-deps && npm run build --prefix client",
-    "prestart":   "npm install --prefix server",
     "start":      "node server/index.js"
   },
   "devDependencies": {
