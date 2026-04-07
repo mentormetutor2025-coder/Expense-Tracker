@@ -3,8 +3,8 @@ node_modules/
 client/node_modules/
 server/node_modules/
 
-# Build output
-client/dist/
+# Build output — dist is committed so Railway always has a working build
+# client/dist/
 
 # Database (contains personal data — don't commit)
 server/data.json
