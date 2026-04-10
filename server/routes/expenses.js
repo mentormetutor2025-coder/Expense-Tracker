@@ -128,7 +128,7 @@ router.get('/:id', (req, res) => {
 
 // POST /api/expenses
 router.post('/', async (req, res) => {
-  const { description, amount, category, date, location } = req.body
+  const { description, amount, category, date, location, companyName, time, capturedBy } = req.body
 
   if (!description || amount == null || !category || !date) {
     return res.status(400).json({ error: 'description, amount, category and date are required' })
@@ -139,12 +139,15 @@ router.post('/', async (req, res) => {
 
   const expense = {
     id: db.data.nextId++,
-    description: description.trim(),
+    description:  description.trim(),
     amount,
-    category: category.trim(),
+    category:     category.trim(),
     date,
-    location: location || null,
-    createdAt: new Date().toISOString()
+    companyName:  companyName  ? companyName.trim()  : null,
+    time:         time         ? time.trim()          : null,
+    capturedBy:   capturedBy   ? capturedBy.trim()   : null,
+    location:     location     || null,
+    createdAt:    new Date().toISOString()
   }
 
   db.data.expenses.push(expense)
@@ -157,7 +160,7 @@ router.put('/:id', async (req, res) => {
   const idx = db.data.expenses.findIndex(e => e.id === Number(req.params.id))
   if (idx === -1) return res.status(404).json({ error: 'Not found' })
 
-  const { description, amount, category, date, location } = req.body
+  const { description, amount, category, date, location, companyName, time, capturedBy } = req.body
 
   if (amount != null && (typeof amount !== 'number' || amount <= 0)) {
     return res.status(400).json({ error: 'amount must be a positive number' })
@@ -165,11 +168,14 @@ router.put('/:id', async (req, res) => {
 
   db.data.expenses[idx] = {
     ...db.data.expenses[idx],
-    ...(description && { description: description.trim() }),
+    ...(description  && { description:  description.trim() }),
     ...(amount != null && { amount }),
-    ...(category && { category: category.trim() }),
-    ...(date && { date }),
-    ...('location' in req.body && { location }),
+    ...(category     && { category:     category.trim() }),
+    ...(date         && { date }),
+    ...('location'    in req.body && { location }),
+    ...('companyName' in req.body && { companyName: companyName ? companyName.trim() : null }),
+    ...('time'        in req.body && { time:        time        ? time.trim()        : null }),
+    ...('capturedBy'  in req.body && { capturedBy:  capturedBy  ? capturedBy.trim()  : null }),
     updatedAt: new Date().toISOString()
   }
 

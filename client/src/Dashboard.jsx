@@ -145,13 +145,19 @@ function RecentActivity({ expenses, categoryColors, onEditExpense }) {
             <div className="recent-item-left">
               <div className="recent-item-desc">{exp.description}</div>
               <div className="recent-item-meta">
-                {exp.createdAt && (
-                  <span className="recent-item-time">{formatDateTime(exp.createdAt)}</span>
+                {exp.time && (
+                  <span className="recent-item-time">🕐 {exp.time}</span>
+                )}
+                {exp.companyName && (
+                  <span className="recent-item-loc">🏢 {exp.companyName}</span>
+                )}
+                {exp.capturedBy && (
+                  <span className="recent-item-loc">👤 {exp.capturedBy}</span>
                 )}
                 {exp.location && (
                   <span className="recent-item-loc">📍 {exp.location.display}</span>
                 )}
-                {!exp.location && !exp.createdAt && (
+                {!exp.time && !exp.companyName && !exp.location && (
                   <span className="recent-item-date">{exp.date}</span>
                 )}
               </div>

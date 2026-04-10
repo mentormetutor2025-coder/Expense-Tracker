@@ -3,11 +3,45 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const router = Router()
 
-const SYSTEM_PROMPT = `You are a receipt and invoice scanner. Carefully examine this image and extract:
+// ── Google Vision: extract raw text from image ────────────────────────────────
+async function extractTextWithGoogleVision(imageBase64, apiKey) {
+  console.log('[scan] Calling Google Vision API...')
+  const response = await fetch(
+    `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
+    {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          image:    { content: imageBase64 },
+          features: [{ type: 'TEXT_DETECTION' }]
+        }]
+      })
+    }
+  )
+  const data = await response.json()
+  console.log('[scan] Google Vision status:', response.status)
+
+  if (!response.ok) {
+    const msg = data?.error?.message || `HTTP ${response.status}`
+    console.error('[scan] Google Vision error:', msg)
+    throw new Error(`Google Vision API error: ${msg}`)
+  }
+
+  const text = data.responses?.[0]?.fullTextAnnotation?.text || ''
+  console.log('[scan] Google Vision extracted text length:', text.length)
+  if (!text) throw new Error('Google Vision could not detect any text in the image.')
+  return text
+}
+
+// ── Claude: structure raw text into JSON fields ───────────────────────────────
+const CLAUDE_STRUCTURE_PROMPT = `You are a receipt and invoice scanner.
+Carefully examine this receipt text and extract:
 - Vendor/Store name
 - Total amount (numbers only, no currency symbol)
 - Date of purchase (in YYYY-MM-DD format)
 - Best category guess from: Food, Transport, Utilities, Salaries, Office Supplies, Entertainment, Medical, Other
+- Confidence score (0-100)
 
 Respond ONLY in this exact JSON format:
 {
@@ -19,20 +53,78 @@ Respond ONLY in this exact JSON format:
 }
 If you cannot read a field clearly, use null.`
 
-// POST /api/scan
+async function structureWithClaude(rawText, categoryList, apiKey) {
+  console.log('[scan] Calling Claude to structure text...')
+  const client = new Anthropic({ apiKey })
+
+  const message = await client.messages.create({
+    model:      'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    system:     CLAUDE_STRUCTURE_PROMPT,
+    messages:   [{
+      role:    'user',
+      content: `Receipt text:\n\n${rawText}\n\nAvailable categories: ${categoryList}\n\nReturn ONLY the JSON object.`
+    }]
+  })
+
+  const raw = message.content[0]?.text?.trim() ?? ''
+  console.log('[scan] Claude raw response:', raw)
+
+  let jsonText = raw
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+    .replace(/'/g, '"')  // normalise single quotes
+
+  return JSON.parse(jsonText)
+}
+
+// ── Fallback: send image directly to Claude (no Google Vision) ────────────────
+async function scanImageWithClaude(imageBase64, mediaType, categoryList, apiKey) {
+  console.log('[scan] Calling Claude Vision directly (no Google Vision key)...')
+  const client = new Anthropic({ apiKey })
+
+  const message = await client.messages.create({
+    model:      'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    system:     CLAUDE_STRUCTURE_PROMPT,
+    messages:   [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+        { type: 'text',  text: `Extract the receipt details. Available categories: ${categoryList}\n\nReturn ONLY the JSON object.` }
+      ]
+    }]
+  })
+
+  const raw = message.content[0]?.text?.trim() ?? ''
+  console.log('[scan] Claude Vision raw response:', raw)
+
+  let jsonText = raw
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+    .replace(/'/g, '"')
+
+  return JSON.parse(jsonText)
+}
+
+// ── POST /api/scan ────────────────────────────────────────────────────────────
 router.post('/', async (req, res) => {
-  // ── API key check ───────────────────────────────────────────────────────────
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  console.log('[scan] ANTHROPIC_API_KEY present:', !!apiKey)
-  if (!apiKey) {
+  const anthropicKey  = process.env.ANTHROPIC_API_KEY
+  const googleVisionKey = process.env.GOOGLE_VISION_API_KEY
+
+  console.log('[scan] ANTHROPIC_API_KEY present:', !!anthropicKey)
+  console.log('[scan] GOOGLE_VISION_API_KEY present:', !!googleVisionKey)
+
+  if (!anthropicKey) {
     return res.status(503).json({
-      error: 'Receipt scanning requires an Anthropic API key. Add ANTHROPIC_API_KEY to your environment and restart the server.'
+      error: 'Receipt scanning requires ANTHROPIC_API_KEY. Add it to your environment variables.'
     })
   }
 
-  // ── Validate request ────────────────────────────────────────────────────────
   const { data, mediaType, categories } = req.body
-  if (!data)      return res.status(400).json({ error: 'No file data provided.' })
+  if (!data)      return res.status(400).json({ error: 'No image data provided.' })
   if (!mediaType) return res.status(400).json({ error: 'No media type provided.' })
 
   if (data.length > 13_500_000) {
@@ -45,46 +137,37 @@ router.post('/', async (req, res) => {
     ? categories.join(', ')
     : 'Food, Transport, Utilities, Salaries, Office Supplies, Entertainment, Medical, Other'
 
-  const userText = `Extract the receipt/invoice details. Available categories: ${categoryList}\n\nReturn ONLY the JSON object — no markdown, no extra text.`
-
-  // ── Build content block ─────────────────────────────────────────────────────
-  const mediaBlock = mediaType === 'application/pdf'
-    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
-    : { type: 'image',    source: { type: 'base64', media_type: mediaType, data } }
-
-  // ── Call Claude ─────────────────────────────────────────────────────────────
   try {
-    const client = new Anthropic({ apiKey })
-
-    console.log('[scan] Calling Claude claude-haiku-4-5-20251001 ...')
-    const message = await client.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: [mediaBlock, { type: 'text', text: userText }] }]
-    })
-
-    console.log('[scan] Stop reason:', message.stop_reason)
-    const raw = message.content[0]?.text?.trim() ?? ''
-    console.log('[scan] Raw Claude response:', raw)
-
-    // Strip markdown code fences if present
-    let jsonText = raw
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim()
-
-    // Replace single-quoted keys/values in case Claude uses them
-    jsonText = jsonText.replace(/'/g, '"')
-
     let result
-    try {
-      result = JSON.parse(jsonText)
-    } catch (parseErr) {
-      console.error('[scan] JSON parse failed. Cleaned text was:', jsonText)
-      return res.status(422).json({
-        error: "Couldn't read this receipt clearly. Please try a sharper photo with good lighting."
-      })
+
+    if (googleVisionKey && mediaType !== 'application/pdf') {
+      // ── Two-step: Google Vision OCR → Claude structuring ──────────────────
+      const rawText = await extractTextWithGoogleVision(data, googleVisionKey)
+      result = await structureWithClaude(rawText, categoryList, anthropicKey)
+    } else {
+      // ── Fallback: Claude Vision handles image directly ─────────────────────
+      if (mediaType === 'application/pdf') {
+        // PDFs go directly to Claude as document blocks
+        const client = new Anthropic({ apiKey: anthropicKey })
+        const message = await client.messages.create({
+          model:      'claude-haiku-4-5-20251001',
+          max_tokens: 512,
+          system:     CLAUDE_STRUCTURE_PROMPT,
+          messages:   [{
+            role: 'user',
+            content: [
+              { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
+              { type: 'text', text: `Available categories: ${categoryList}\n\nReturn ONLY the JSON object.` }
+            ]
+          }]
+        })
+        const raw = message.content[0]?.text?.trim() ?? ''
+        console.log('[scan] Claude PDF raw response:', raw)
+        let jsonText = raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'').trim().replace(/'/g,'"')
+        result = JSON.parse(jsonText)
+      } else {
+        result = await scanImageWithClaude(data, mediaType, categoryList, anthropicKey)
+      }
     }
 
     // Normalise fields
@@ -94,25 +177,29 @@ router.post('/', async (req, res) => {
       result.amount = isNaN(parsed) ? null : parsed
     }
 
-    console.log('[scan] Parsed result:', JSON.stringify(result))
+    console.log('[scan] Final result:', JSON.stringify(result))
     res.json(result)
 
   } catch (err) {
-    console.error('[scan] API error status:', err.status)
-    console.error('[scan] API error message:', err.message)
-    if (err.error) console.error('[scan] API error body:', JSON.stringify(err.error))
+    console.error('[scan] Error name:', err.name)
+    console.error('[scan] Error message:', err.message)
+    if (err.status) console.error('[scan] HTTP status:', err.status)
+    if (err.error)  console.error('[scan] Error body:', JSON.stringify(err.error))
 
-    if (err.status === 400) {
+    if (err.message?.includes('JSON')) {
       return res.status(422).json({
-        error: 'This image could not be processed. Try a clearer photo (JPEG or PNG recommended).'
+        error: `Scanning completed but response was unreadable. Raw: ${err.message}`
       })
     }
     if (err.status === 401) {
-      return res.status(503).json({
-        error: 'Invalid Anthropic API key. Check the ANTHROPIC_API_KEY environment variable.'
-      })
+      return res.status(503).json({ error: 'Invalid API key. Check ANTHROPIC_API_KEY.' })
     }
-    res.status(500).json({ error: 'Scanning failed unexpectedly. Please try again.' })
+    if (err.status === 400) {
+      return res.status(422).json({ error: 'Image could not be processed. Try a clearer JPEG or PNG.' })
+    }
+
+    // Return exact error message to client for diagnosis
+    res.status(500).json({ error: `Scan failed: ${err.message}` })
   }
 })
 

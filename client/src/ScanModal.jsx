@@ -98,6 +98,10 @@ export default function ScanModal({ onClose, onComplete, categories }) {
         mediaType = 'image/jpeg'
       }
 
+      const sizeKB = Math.round((data.length * 3) / 4 / 1024)
+      console.log('[scan] Image size (KB):', sizeKB)
+      console.log('[scan] mediaType:', mediaType)
+
       const catNames = categories.map(c => (typeof c === 'string' ? c : c.name))
       const res  = await fetch('/api/scan', {
         method:  'POST',
@@ -105,9 +109,11 @@ export default function ScanModal({ onClose, onComplete, categories }) {
         body:    JSON.stringify({ data, mediaType, categories: catNames }),
       })
       const json = await res.json()
+      console.log('[scan] Server response:', JSON.stringify(json))
       if (!res.ok) throw new Error(json.error || 'Scan failed.')
       setResult(json)
     } catch (err) {
+      console.error('[scan] Client error:', err.message)
       setError(err.message)
     } finally {
       setScanning(false)
@@ -285,8 +291,8 @@ export default function ScanModal({ onClose, onComplete, categories }) {
                   <div className="scan-loading-shimmer" />
                 </div>
               )}
-              <p>Reading receipt…</p>
-              <p className="scan-loading-sub">This usually takes a few seconds</p>
+              <p className="scan-loading-title">Scanning receipt... please wait</p>
+              <p className="scan-loading-sub">Extracting text and reading details</p>
             </div>
           )}
 

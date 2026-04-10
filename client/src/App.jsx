@@ -22,6 +22,11 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function currentTime() {
+  const now = new Date()
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+}
+
 // ── Expense Form Modal ──────────────────────────────────────────────────────
 function ExpenseModal({ expense, onClose, onSaved, allCategories, locationEnabled }) {
   const editing = !!expense?.id
@@ -30,6 +35,9 @@ function ExpenseModal({ expense, onClose, onSaved, allCategories, locationEnable
     amount:      expense?.amount      ?? '',
     category:    expense?.category    ?? DEFAULT_CATEGORIES[0],
     date:        expense?.date        ?? today(),
+    companyName: expense?.companyName ?? '',
+    time:        expense?.time        ?? currentTime(),
+    capturedBy:  expense?.capturedBy  ?? (localStorage.getItem('lastCapturedBy') || ''),
   })
   const [error,    setError]    = useState('')
   const [saving,   setSaving]   = useState(false)
@@ -62,6 +70,8 @@ function ExpenseModal({ expense, onClose, onSaved, allCategories, locationEnable
     if (!form.description.trim()) return setError('Description is required.')
     if (isNaN(amount) || amount <= 0) return setError('Enter a valid positive amount.')
     if (!form.date) return setError('Date is required.')
+    if (!form.companyName.trim()) return setError('Company Name is required.')
+    if (!form.capturedBy.trim()) return setError('Captured By is required.')
 
     setSaving(true)
     try {
@@ -73,6 +83,9 @@ function ExpenseModal({ expense, onClose, onSaved, allCategories, locationEnable
       if (locationEnabled && !editing) {
         location = await captureLocation()  // null if unavailable
       }
+
+      // Remember capturedBy for next time
+      if (form.capturedBy.trim()) localStorage.setItem('lastCapturedBy', form.capturedBy.trim())
 
       const res = await fetch(url, {
         method,
@@ -151,6 +164,32 @@ function ExpenseModal({ expense, onClose, onSaved, allCategories, locationEnable
                 <select value={form.category} onChange={e => set('category', e.target.value)}>
                   {categories.map(c => <option key={c}>{c}</option>)}
                 </select>
+              </div>
+              <div className="full">
+                <label>Company Name <span className="required-star">*</span></label>
+                <input
+                  type="text"
+                  value={form.companyName}
+                  onChange={e => set('companyName', e.target.value)}
+                  placeholder="Enter company name"
+                />
+              </div>
+              <div>
+                <label>Time</label>
+                <input
+                  type="time"
+                  value={form.time}
+                  onChange={e => set('time', e.target.value)}
+                />
+              </div>
+              <div>
+                <label>Captured By <span className="required-star">*</span></label>
+                <input
+                  type="text"
+                  value={form.capturedBy}
+                  onChange={e => set('capturedBy', e.target.value)}
+                  placeholder="Enter your full name"
+                />
               </div>
             </div>
             {error && <p style={{ color: 'var(--danger)', fontSize: '.85rem', marginTop: '.75rem' }}>{error}</p>}
@@ -333,12 +372,18 @@ export default function App() {
                     <tr key={exp.id}>
                       <td data-label="Date">
                         <div>{exp.date}</div>
-                        {exp.createdAt && (
-                          <div className="exp-time">{formatDateTime(exp.createdAt)}</div>
+                        {exp.time && (
+                          <div className="exp-time">🕐 {exp.time}</div>
                         )}
                       </td>
                       <td data-label="Description">
                         <div>{exp.description}</div>
+                        {exp.companyName && (
+                          <div className="exp-meta">🏢 {exp.companyName}</div>
+                        )}
+                        {exp.capturedBy && (
+                          <div className="exp-meta">👤 {exp.capturedBy}</div>
+                        )}
                         {exp.location && (
                           <div className="exp-location">📍 {exp.location.display || 'Location detected'}</div>
                         )}

@@ -45,8 +45,10 @@ export function exportToExcel(expenses, settings, dateRange) {
   const generated = new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
   const periodLabel = `${fmtDate(dateRange.from)} – ${fmtDate(dateRange.to)}`
 
-  const hasTime     = expenses.some(e => e.createdAt)
-  const hasLocation = expenses.some(e => e.location)
+  const hasTime        = expenses.some(e => e.time)
+  const hasLocation    = expenses.some(e => e.location)
+  const hasCompanyName = expenses.some(e => e.companyName)
+  const hasCapturedBy  = expenses.some(e => e.capturedBy)
 
   const wb = XLSX.utils.book_new()
 
@@ -63,22 +65,20 @@ export function exportToExcel(expenses, settings, dateRange) {
   expRows.push(blank)
 
   // Column headers
-  const COL_HEADERS = ['Date', 'Description', 'Category', `Amount (${currency})`, 'Notes']
-  if (hasTime)     COL_HEADERS.push('Time')
-  if (hasLocation) COL_HEADERS.push('Location')
+  const COL_HEADERS = ['Date', 'Description', 'Category', `Amount (${currency})`]
+  if (hasCompanyName) COL_HEADERS.push('Company Name')
+  if (hasTime)        COL_HEADERS.push('Time')
+  if (hasCapturedBy)  COL_HEADERS.push('Captured By')
+  if (hasLocation)    COL_HEADERS.push('Location')
   expRows.push(COL_HEADERS)
 
   // Data rows
   for (const e of expenses) {
-    const row = [
-      e.date,
-      e.description,
-      e.category,
-      e.amount,
-      e.notes || '',
-    ]
-    if (hasTime)     row.push(e.createdAt ? fmtDateTime(e.createdAt) : '')
-    if (hasLocation) row.push(fmtLocation(e.location))
+    const row = [e.date, e.description, e.category, e.amount]
+    if (hasCompanyName) row.push(e.companyName || '')
+    if (hasTime)        row.push(e.time        || '')
+    if (hasCapturedBy)  row.push(e.capturedBy  || '')
+    if (hasLocation)    row.push(fmtLocation(e.location))
     expRows.push(row)
   }
 
@@ -98,13 +98,14 @@ export function exportToExcel(expenses, settings, dateRange) {
   // Column widths
   ws1['!cols'] = [
     { wch: 14 },   // Date
-    { wch: 36 },   // Description
+    { wch: 32 },   // Description
     { wch: 20 },   // Category
     { wch: 16 },   // Amount
-    { wch: 20 },   // Notes
   ]
-  if (hasTime)     ws1['!cols'].push({ wch: 22 })
-  if (hasLocation) ws1['!cols'].push({ wch: 30 })
+  if (hasCompanyName) ws1['!cols'].push({ wch: 24 })
+  if (hasTime)        ws1['!cols'].push({ wch: 10 })
+  if (hasCapturedBy)  ws1['!cols'].push({ wch: 22 })
+  if (hasLocation)    ws1['!cols'].push({ wch: 30 })
 
   // Number format for amount cells
   const dataStartRow = (businessName ? 1 : 0) + 4 + 1 + 1
@@ -156,8 +157,10 @@ export function exportToPDF(expenses, settings, dateRange) {
   const generated = new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
   const periodLabel = `${fmtDate(dateRange.from)} – ${fmtDate(dateRange.to)}`
 
-  const hasTime     = expenses.some(e => e.createdAt)
-  const hasLocation = expenses.some(e => e.location)
+  const hasTime        = expenses.some(e => e.time)
+  const hasLocation    = expenses.some(e => e.location)
+  const hasCompanyName = expenses.some(e => e.companyName)
+  const hasCapturedBy  = expenses.some(e => e.capturedBy)
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -184,31 +187,36 @@ export function exportToPDF(expenses, settings, dateRange) {
   doc.text(`${expenses.length} expense${expenses.length !== 1 ? 's' : ''}`, pageW - 14, 27, { align: 'right' })
 
   // ── Expenses table ────────────────────────────────────────────────────────
-  const head  = [['Date', 'Description', 'Category', `Amount (${currency})`]]
-  if (hasTime)     head[0].push('Time')
-  if (hasLocation) head[0].push('Location')
+  const head = [['Date', 'Description', 'Category', `Amount (${currency})`]]
+  if (hasCompanyName) head[0].push('Company')
+  if (hasTime)        head[0].push('Time')
+  if (hasCapturedBy)  head[0].push('Captured By')
+  if (hasLocation)    head[0].push('Location')
+
+  const extraCols = [hasCompanyName, hasTime, hasCapturedBy, hasLocation].filter(Boolean).length
+  const descWidth = extraCols >= 3 ? 36 : extraCols >= 1 ? 44 : 65
 
   const body = expenses.map(e => {
-    const row = [
-      e.date,
-      e.description,
-      e.category,
-      fmtAmount(e.amount, currency),
-    ]
-    if (hasTime)     row.push(e.createdAt ? fmtDateTime(e.createdAt) : '—')
-    if (hasLocation) row.push(fmtLocation(e.location) || '—')
+    const row = [e.date, e.description, e.category, fmtAmount(e.amount, currency)]
+    if (hasCompanyName) row.push(e.companyName || '—')
+    if (hasTime)        row.push(e.time        || '—')
+    if (hasCapturedBy)  row.push(e.capturedBy  || '—')
+    if (hasLocation)    row.push(fmtLocation(e.location) || '—')
     return row
   })
 
   // Build column styles dynamically
   const colStyles = {
-    0: { cellWidth: 22 },
-    1: { cellWidth: hasTime || hasLocation ? 48 : 65 },
-    2: { cellWidth: 28 },
-    3: { cellWidth: 26, halign: 'right' },
+    0: { cellWidth: 20 },
+    1: { cellWidth: descWidth },
+    2: { cellWidth: 24 },
+    3: { cellWidth: 22, halign: 'right' },
   }
-  if (hasTime)     colStyles[4] = { cellWidth: hasLocation ? 26 : 'auto' }
-  if (hasLocation) colStyles[hasTime ? 5 : 4] = { cellWidth: 'auto' }
+  let ci = 4
+  if (hasCompanyName) colStyles[ci++] = { cellWidth: 26 }
+  if (hasTime)        colStyles[ci++] = { cellWidth: 14 }
+  if (hasCapturedBy)  colStyles[ci++] = { cellWidth: 22 }
+  if (hasLocation)    colStyles[ci]   = { cellWidth: 'auto' }
 
   autoTable(doc, {
     startY: 44,

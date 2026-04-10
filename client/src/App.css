@@ -951,16 +951,27 @@ tr:hover td { background: #f8fafc; }
 .bar-fill { height: 100%; border-radius: 999px; background: var(--primary); transition: width .4s; }
 .bar-row .bar-amount { width: 80px; text-align: right; font-weight: 600; flex-shrink: 0; }
 
-/* ── Time & Location in expense table ─────────────────────────────────────── */
-.exp-time {
+/* ── Time, Location & meta in expense table ──────────────────────────────── */
+.exp-time,
+.exp-location,
+.exp-meta {
   font-size: .75rem;
   color: var(--muted);
   margin-top: .15rem;
 }
-.exp-location {
-  font-size: .75rem;
-  color: var(--muted);
-  margin-top: .15rem;
+
+/* ── Required field star ─────────────────────────────────────────────────── */
+.required-star {
+  color: var(--danger);
+  margin-left: .15rem;
+}
+
+/* ── Scan loading title ──────────────────────────────────────────────────── */
+.scan-loading-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin: .5rem 0 .2rem;
 }
 
 /* ── Location info banner in modal ───────────────────────────────────────── */
